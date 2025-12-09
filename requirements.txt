@@ -1,7 +1,7 @@
 Flask==2.3.3
-flask-cors==4.0.0
+flask-cors==6.0.1
 gunicorn==20.1.0
-numpy==1.26.2
-nltk==3.9.0
-tensorflow-cpu==2.12.0
+numpy==1.26.4
+nltk==3.9.1
+tensorflow-cpu==2.18.1
 pickle5==0.0.12
