@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 import nltk
 from nltk.stem import WordNetLemmatizer
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from tensorflow.keras.models import load_model
 import os
@@ -92,7 +92,52 @@ print(f"model loaded: {bool(model)}", file=sys.stderr)
 application = Flask(__name__)
 # also expose `app` for gunicorn commands expecting application:app
 app = application
-CORS(application)
+
+# ---------------------------
+# CORS configuration
+# ---------------------------
+# Restrict origins in production. Add any allowed frontends here.
+ALLOWED_ORIGINS = {
+    "https://rizzlerchatbot-cl20.onrender.com",
+    "https://rizzlerchatbot.onrender.com",
+    # add other allowed origins if needed
+}
+
+# Use flask-cors to cover the common cases (registers OPTIONS handlers automatically).
+# This settings allows CORS for routes matching /api/* to the specified origins.
+CORS(
+    application,
+    resources={r"/api/*": {"origins": list(ALLOWED_ORIGINS)}},
+    supports_credentials=True,
+    expose_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+)
+
+# A final safety-net to ensure CORS headers are present even on error responses.
+# It will echo back the Origin header only if it's in our allowed list.
+@application.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin")
+    if origin and origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    # ensure these are present for preflight and XHR cases
+    response.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+    response.headers.setdefault("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+    response.headers.setdefault("Access-Control-Allow-Credentials", "true")
+    return response
+
+# Explicit OPTIONS handler for the /api/chat endpoint (helps some proxies)
+@application.route("/api/chat", methods=["OPTIONS"])
+def chat_options():
+    response = make_response("", 204)
+    origin = request.headers.get("Origin")
+    if origin and origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    return response
 
 # ---------------------------
 # NLP helper functions
@@ -105,7 +150,7 @@ def clean_up_sentence(sentence: str):
     # guard in case punkt is still missing at runtime
     try:
         sentence_words = nltk.word_tokenize(sentence)
-    except LookupError as e:
+    except LookupError:
         # try to download punkt at runtime (best-effort)
         try:
             nltk.download("punkt", download_dir=NLTK_DATA_DIR)
