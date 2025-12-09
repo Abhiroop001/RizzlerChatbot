@@ -1,9 +1,11 @@
+// App.js
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { FiSend } from "react-icons/fi";
 import { SiChatbot } from "react-icons/si";
 import "./App.css";
 
+// If you prefer to use CRA proxy, set API_URL to "" or "/api"
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
 function App() {
@@ -20,6 +22,10 @@ function App() {
     }
   }, [messages, loading]);
 
+  // Optionally set axios defaults:
+  axios.defaults.baseURL = API_URL;
+  // axios.defaults.withCredentials = true; // only if you need cookies/auth
+
   const handleSend = async () => {
     const trimmed = input.trim();
     if (!trimmed || loading) return;
@@ -30,26 +36,41 @@ function App() {
     setLoading(true);
 
     try {
-      const res = await axios.post(`${API_URL}/api/chat`, {
-        message: trimmed,
-      });
+      const res = await axios.post("/api/chat", { message: trimmed });
+      // If you didn't use a proxy, this will send to http://localhost:5000/api/chat
+      const data = res && res.data ? res.data : null;
+
+      if (!data) {
+        throw new Error("No response data");
+      }
 
       const botMessage = {
         from: "bot",
-        text: res.data.reply,
+        text: data.reply || "Hmm, I didn't get a reply text.",
         meta: {
-          intent: res.data.intent,
-          confidence: res.data.confidence,
+          intent: data.intent || "unknown",
+          confidence: typeof data.confidence === "number" ? data.confidence : 0,
         },
       };
 
       setMessages((prev) => [...prev, botMessage]);
     } catch (err) {
+      console.error("Chat request failed:", err);
+
+      // Prefer server-provided message if present
+      let errorText = "Oops, I couldn't reach the server. Please try again in a moment.";
+      if (err.response && err.response.data && err.response.data.reply) {
+        errorText = err.response.data.reply;
+      } else if (err.message) {
+        // show the error message for debugging in dev
+        errorText = `Network error: ${err.message}`;
+      }
+
       setMessages((prev) => [
         ...prev,
         {
           from: "bot",
-          text: "Oops, I couldn't reach the server. Please try again in a moment.",
+          text: errorText,
         },
       ]);
     } finally {
@@ -103,7 +124,7 @@ function App() {
                   {msg.meta && (
                     <div className="msg-meta">
                       intent: <b>{msg.meta.intent}</b> • conf:{" "}
-                      {msg.meta.confidence.toFixed(2)}
+                      {Number(msg.meta.confidence).toFixed(2)}
                     </div>
                   )}
                 </div>
